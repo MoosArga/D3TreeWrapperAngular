@@ -1,0 +1,70 @@
+{
+  "id": "1",
+  "name": "NRO",
+  "children": [
+    {
+      "id": "2",
+      "name": "SPB",
+      "children": [
+        {
+          "id": "3",
+          "name": "SPB"
+        },
+        {
+          "id": "4",
+          "name": "SPB",
+          "children": [
+            {
+              "id": "5",
+              "name": "SPB"
+            },
+            {
+              "id": "6",
+              "name": "SPB"
+            },
+            {
+              "id": "7",
+              "name": "SPB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "SPB",
+      "children": [
+        {
+          "id": "5",
+          "name": "SPB"
+        },
+        {
+          "id": "6",
+          "name": "SPB"
+        },
+        {
+          "id": "7",
+          "name": "SPB"
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "SPB",
+      "children": [
+        {
+          "id": "5",
+          "name": "SPB"
+        },
+        {
+          "id": "6",
+          "name": "SPB"
+        },
+        {
+          "id": "7",
+          "name": "SPB"
+        }
+      ]
+    }
+  ]
+}
