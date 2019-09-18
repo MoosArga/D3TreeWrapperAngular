@@ -15,111 +15,213 @@ import { ITreeModel } from '../../model/itree-model';
 export class TreeComponent implements OnInit, OnChanges {
   @HostBinding('class.tree-container') defautlClass = true;
 
-  @Input() data: ITreeModel;
+  @Input() treeData: ITreeModel;
   @Input() width: number;
   @Input() height: number;
 
+  private treemap;
+  private root;
+  private svg;
+  private i = 0;
+  private duration = 750;
+  private self;
+
   constructor() {}
 
-  ngOnInit() {}
+  ngOnInit() {
+    this.self = this;
+    const margin = { top: 20, right: 90, bottom: 30, left: 90 },
+      width = 960 - margin.left - margin.right,
+      height = 500 - margin.top - margin.bottom;
+
+    this.svg = d3
+      .select('#tree-container')
+      .append('svg')
+      .attr('width', width + margin.right + margin.left)
+      .attr('height', height + margin.top + margin.bottom)
+      .append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    this.treemap = d3.tree().size([height, width]);
+  }
 
   ngOnChanges() {
-    const treeLayout = d3
-      .tree()
-      .size([this.height, this.width])
-      .nodeSize([80, 200]);
-    if (this.data) {
-      this.traceTree(treeLayout, this.data);
+    this.root = d3.hierarchy(this.treeData, d => d.children);
+    this.root.x0 = this.height / 2;
+    this.root.y0 = 0;
+
+    this.root.children.forEach(d => {
+      this.collapse(d);
+    });
+
+    this.update(this.root);
+  }
+
+  collapse(d) {
+    if (d.children) {
+      d._children = d.children;
+      d._children.forEach(d => {
+        this.collapse(d);
+      });
+      d.children = null;
     }
   }
 
-  private traceTree(treeLayout, data: ITreeModel) {
-    const root = d3.hierarchy(data);
-    treeLayout(root);
-    d3.select('#tree-container svg').remove();
-    const svg = d3
-      .select('#tree-container')
-      .append('svg')
-      .attr('width', '100%')
-      .attr('height', '100%')
-      .append('g')
-      .attr('transform', 'translate(100, 200)');
+  update(source) {
+    const self = this;
+    // Assigns the x and y position for the nodes
+    const treeData = this.treemap(this.root);
 
-    this.setZoomBehaviour();
-    this.traceLinks(svg, root);
-    this.traceNodes(svg, root);
-  }
+    // Compute the new tree layout.
+    const nodes = treeData.descendants(),
+      links = treeData.descendants().slice(1);
 
-  private traceLinks(svg: any, root: any) {
-    svg
-      .append('g')
-      .attr('class', 'links')
-      .selectAll('line.tree-link')
-      .data(root.links())
-      .enter()
-      .append('path')
-      .attr('class', 'tree-link-path')
-      .attr(
-        'd',
-        d =>
-          'M' +
-          d.source.y +
-          ',' +
-          d.source.x +
-          'C' +
-          (d.source.y + 100) +
-          ',' +
-          d.source.x +
-          ' ' +
-          (d.source.y + 100) +
-          ',' +
-          d.target.x +
-          ' ' +
-          d.target.y +
-          ',' +
-          d.target.x
-      );
-  }
+    // Normalize for fixed-depth.
+    nodes.forEach(d => {
+      d.y = d.depth * 180;
+    });
 
-  private traceNodes(svg: any, root: any) {
-    const nodes = svg
-      .append('g')
-      .attr('class', 'nodes')
-      .selectAll('circle.tree-node')
-      .data(root.descendants());
-    const node = nodes
+    // ****************** Nodes section ***************************
+
+    // Update the nodes...
+    let node = this.svg.selectAll('g.node').data(nodes, function(d) {
+      return d.id || (d.id = ++this.i);
+    });
+
+    // Enter any new modes at the parent's previous position.
+    let nodeEnter = node
       .enter()
       .append('g')
-      .attr('class', 'tree-node-container')
-      .attr('transform', d => 'translate(' + d.y + ',' + d.x + ')')
-      .on('click', d => {
-        if (d.children) {
-          d.memento = d.children;
-          d.children = null;
-        } else {
-          d.children = d.memento;
-          d.memento = null;
-        }
+      .attr('class', 'node')
+      .attr('transform', function(d) {
+        return 'translate(' + source.y0 + ',' + source.x0 + ')';
+      })
+      .on('click', d => { self.click(d, self); });
+
+    // Add Circle for the nodes
+    nodeEnter
+      .append('circle')
+      .attr('class', 'node')
+      .attr('r', 1e-6)
+      .style('fill', function(d) {
+        return d._children ? 'lightsteelblue' : '#fff';
       });
 
-    node
-      .append('circle')
-      .classed('tree-node', true)
-      .attr('r', 30);
-
-    node
+    // Add labels for the nodes
+    nodeEnter
       .append('text')
-      .attr('dy', '0.3em')
-      .attr('text-anchor', 'middle')
-      .text(d => d.data.name);
+      .attr('dy', '.35em')
+      .attr('x', function(d) {
+        return d.children || d._children ? -13 : 13;
+      })
+      .attr('text-anchor', function(d) {
+        return d.children || d._children ? 'end' : 'start';
+      })
+      .text(function(d) {
+        return d.data.name;
+      });
+
+    // UPDATE
+    let nodeUpdate = nodeEnter.merge(node);
+
+    // Transition to the proper position for the node
+    nodeUpdate
+      .transition()
+      .duration(this.duration)
+      .attr('transform', function(d) {
+        return 'translate(' + d.y + ',' + d.x + ')';
+      });
+
+    // Update the node attributes and style
+    nodeUpdate
+      .select('circle.node')
+      .attr('r', 10)
+      .style('fill', function(d) {
+        return d._children ? 'lightsteelblue' : '#fff';
+      })
+      .attr('cursor', 'pointer');
+
+    // Remove any exiting nodes
+    let nodeExit = node
+      .exit()
+      .transition()
+      .duration(this.duration)
+      .attr('transform', function(d) {
+        return 'translate(' + source.y + ',' + source.x + ')';
+      })
+      .remove();
+
+    // On exit reduce the node circles size to 0
+    nodeExit.select('circle').attr('r', 1e-6);
+
+    // On exit reduce the opacity of text labels
+    nodeExit.select('text').style('fill-opacity', 1e-6);
+
+    // ****************** links section ***************************
+
+    // Update the links...
+    let link = this.svg.selectAll('path.link').data(links, function(d) {
+      return d.id;
+    });
+
+    // Enter any new links at the parent's previous position.
+    let linkEnter = link
+      .enter()
+      .insert('path', 'g')
+      .attr('class', 'link')
+      .attr('d', function(d) {
+        let o = { x: source.x0, y: source.y0 };
+        return self.diagonal(o, o);
+      });
+
+    // UPDATE
+    let linkUpdate = linkEnter.merge(link);
+
+    // Transition back to the parent element position
+    linkUpdate
+      .transition()
+      .duration(this.duration)
+      .attr('d', function(d) {
+        return self.diagonal(d, d.parent);
+      });
+
+    // Remove any exiting links
+    let linkExit = link
+      .exit()
+      .transition()
+      .duration(this.duration)
+      .attr('d', function(d) {
+        let o = { x: source.x, y: source.y };
+        return self.diagonal(o, o);
+      })
+      .remove();
+
+    // Store the old positions for transition.
+    nodes.forEach(function(d) {
+      d.x0 = d.x;
+      d.y0 = d.y;
+    });
+
+    // Creates a curved (diagonal) path from parent to the child nodes
   }
 
-  setZoomBehaviour() {
-    const zoom = d3
-      .zoom()
-      .on('zoom', () => d3.select('g').attr('transform', d3.event.transform));
-    const svg = d3.select('svg');
-    svg.call(zoom.transform, d3.zoomIdentity.translate(100, 400));
-    svg.call(zoom);
+  private diagonal(s, d) {
+    const path = `M ${s.y} ${s.x}
+          C ${(s.y + d.y) / 2} ${s.x},
+            ${(s.y + d.y) / 2} ${d.x},
+            ${d.y} ${d.x}`;
+
+    return path;
+  }
+
+  private click(d, self) {
+    if (d.children) {
+      d._children = d.children;
+      d.children = null;
+    } else {
+      d.children = d._children;
+      d._children = null;
+    }
+      self.update(d);
   }
 }
